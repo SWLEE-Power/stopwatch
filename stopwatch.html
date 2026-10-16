@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스탑워치</title>
+<style>
+  :root { --bg:#0f1220; --card:#1a1e33; --text:#f2f4ff; --muted:#8b91b3; --accent:#4f8cff; --green:#2ecc71; --red:#ff5c6c; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--text); font-family:"Segoe UI","Malgun Gothic",sans-serif; padding:16px; }
+  .card { background:var(--card); border-radius:20px; padding:32px; width:100%; max-width:420px; box-shadow:0 10px 40px rgba(0,0,0,.4); }
+  h1 { margin:0 0 16px; font-size:18px; font-weight:600; color:var(--muted); text-align:center; }
+  #display { font-family:Consolas,"Courier New",monospace; font-size:clamp(40px,12vw,64px); text-align:center; letter-spacing:2px; font-variant-numeric:tabular-nums; margin:12px 0 28px; }
+  #display small { font-size:.55em; color:var(--muted); }
+  .btns { display:flex; gap:12px; }
+  button { flex:1; padding:14px; border:0; border-radius:12px; font-size:16px; font-weight:600; color:#fff; cursor:pointer; transition:transform .1s, opacity .2s; }
+  button:active { transform:scale(.96); }
+  button:disabled { opacity:.35; cursor:not-allowed; }
+  #startBtn { background:var(--green); }
+  #startBtn.running { background:var(--red); }
+  #lapBtn { background:var(--accent); }
+  #resetBtn { background:#454b6e; }
+  #laps { list-style:none; margin:24px 0 0; padding:0; max-height:220px; overflow-y:auto; }
+  #laps li { display:flex; justify-content:space-between; padding:10px 4px; border-bottom:1px solid #2a2f4c; font-family:Consolas,monospace; font-size:15px; }
+  #laps li span:first-child { color:var(--muted); }
+  #laps li.best { color:var(--green); }
+  #laps li.worst { color:var(--red); }
+  .hint { text-align:center; color:var(--muted); font-size:12px; margin-top:16px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>스탑워치</h1>
+  <div id="display">00:00<small>.00</small></div>
+  <div class="btns">
+    <button id="startBtn">시작</button>
+    <button id="lapBtn" disabled>랩</button>
+    <button id="resetBtn" disabled>리셋</button>
+  </div>
+  <ul id="laps"></ul>
+  <div class="hint">단축키: 스페이스 = 시작/정지 · L = 랩 · R = 리셋</div>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  const display = $('display'), startBtn = $('startBtn'), lapBtn = $('lapBtn'), resetBtn = $('resetBtn'), lapsEl = $('laps');
+  let running = false, startTime = 0, elapsed = 0, raf = 0, laps = [], lastLapTotal = 0;
+
+  function fmt(ms) {
+    const cs = Math.floor(ms / 10) % 100;
+    const s = Math.floor(ms / 1000) % 60;
+    const m = Math.floor(ms / 60000) % 60;
+    const h = Math.floor(ms / 3600000);
+    const p = n => String(n).padStart(2, '0');
+    return (h ? p(h) + ':' : '') + p(m) + ':' + p(s) + '.' + p(cs);
+  }
+  function render() {
+    const t = fmt(elapsed), i = t.lastIndexOf('.');
+    display.innerHTML = t.slice(0, i) + '<small>' + t.slice(i) + '</small>';
+  }
+  function tick() {
+    elapsed = performance.now() - startTime;
+    render();
+    raf = requestAnimationFrame(tick);
+  }
+  function toggle() {
+    if (running) {
+      cancelAnimationFrame(raf);
+      running = false;
+      startBtn.textContent = '재개';
+      startBtn.classList.remove('running');
+    } else {
+      startTime = performance.now() - elapsed;
+      raf = requestAnimationFrame(tick);
+      running = true;
+      startBtn.textContent = '정지';
+      startBtn.classList.add('running');
+    }
+    lapBtn.disabled = !running;
+    resetBtn.disabled = false;
+  }
+  function lap() {
+    if (!running) return;
+    laps.push({ split: elapsed - lastLapTotal, total: elapsed });
+    lastLapTotal = elapsed;
+    renderLaps();
+  }
+  function renderLaps() {
+    let best = -1, worst = -1;
+    if (laps.length > 1) {
+      const s = laps.map(l => l.split);
+      best = s.indexOf(Math.min(...s));
+      worst = s.indexOf(Math.max(...s));
+    }
+    lapsEl.innerHTML = laps.map((l, i) =>
+      `<li class="${i === best ? 'best' : i === worst ? 'worst' : ''}"><span>랩 ${i + 1}</span><span>${fmt(l.split)}</span><span>${fmt(l.total)}</span></li>`
+    ).reverse().join('');
+  }
+  function reset() {
+    cancelAnimationFrame(raf);
+    running = false; elapsed = 0; laps = []; lastLapTotal = 0;
+    startBtn.textContent = '시작';
+    startBtn.classList.remove('running');
+    lapBtn.disabled = true; resetBtn.disabled = true;
+    lapsEl.innerHTML = '';
+    render();
+  }
+  startBtn.onclick = toggle; lapBtn.onclick = lap; resetBtn.onclick = reset;
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); toggle(); }
+    else if (e.key.toLowerCase() === 'l') lap();
+    else if (e.key.toLowerCase() === 'r') reset();
+  });
+</script>
+</body>
+</html>
