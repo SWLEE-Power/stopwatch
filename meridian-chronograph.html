@@ -1,0 +1,814 @@
+<title>Meridian 크로노그래프</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&family=Marcellus&display=swap">
+<style>
+  /* Layout: watch on the left as the hero, an instrument card on the right; stacks on phones. */
+  :root {
+    --bg: #07140f;
+    --bg-hi: #123a29;
+    --panel: rgba(236, 228, 205, 0.04);
+    --line: rgba(214, 186, 120, 0.2);
+    --fg: #ede7d8;
+    --muted: #9cab9f;
+    --gold: #c9a35a;
+    --gold-hi: #ebcb88;
+    --on-gold: #1c1608;
+    --good: #86d6a6;
+    --bad: #e8937f;
+    --display: "Marcellus", "Times New Roman", Georgia, serif;
+    --body: "Jost", "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    color: var(--fg);
+    font-family: var(--body);
+    background:
+      radial-gradient(110% 80% at 28% 18%, var(--bg-hi), transparent 62%),
+      var(--bg);
+    background-attachment: fixed;
+  }
+  .wrap {
+    max-width: 1140px;
+    margin: 0 auto;
+    padding-block: 32px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 40px;
+    align-items: center;
+  }
+  @media (max-width: 880px) {
+    .wrap { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-block: 16px 40px; }
+  }
+  .watch { min-width: 0; }
+  #watch {
+    display: block;
+    width: 100%;
+    max-width: 620px;
+    aspect-ratio: 1;
+    margin: 0 auto;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .hint {
+    margin: 6px auto 0;
+    max-width: 46ch;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .panel {
+    min-width: 0;
+    display: grid;
+    gap: 22px;
+    padding: 28px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+  }
+  @media (max-width: 480px) { .panel { padding: 20px; } }
+  .eyebrow {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+  h1 {
+    margin: 4px 0 0;
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(28px, 4vw, 36px);
+    letter-spacing: 0.04em;
+    text-wrap: balance;
+  }
+  .readout {
+    display: grid;
+    gap: 6px;
+    padding-block: 18px;
+    border-block: 1px solid var(--line);
+  }
+  .readout .label { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; display: flex; justify-content: space-between; gap: 12px; }
+  #time {
+    font-family: var(--body);
+    font-weight: 300;
+    font-size: clamp(44px, 7.2vw, 64px);
+    line-height: 1;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  #time .cs { color: var(--gold-hi); font-size: 0.6em; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .chip[data-state="run"] { color: var(--good); }
+  .chip[data-state="pause"] { color: var(--gold-hi); }
+
+  .controls { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; }
+  .btn {
+    font: 500 15px/1 var(--body);
+    letter-spacing: 0.06em;
+    padding: 15px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--fg);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.08s;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--gold); }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn:disabled { opacity: 0.38; cursor: not-allowed; }
+  .btn.primary {
+    background: linear-gradient(180deg, var(--gold-hi), var(--gold));
+    border-color: transparent;
+    color: var(--on-gold);
+    font-weight: 600;
+  }
+  .btn kbd { font: inherit; font-size: 11px; opacity: 0.6; margin-left: 6px; }
+  :focus-visible { outline: 2px solid var(--gold-hi); outline-offset: 3px; }
+
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .stat { display: grid; gap: 4px; min-width: 0; }
+  .stat .k { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .stat .v { font-size: 20px; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 12px; color: var(--muted); margin-left: 4px; }
+  .stat .note { font-size: 12px; color: var(--muted); }
+
+  fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; }
+  legend { padding: 0; margin-bottom: 10px; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .dials { display: flex; flex-wrap: wrap; gap: 8px; }
+  .dials label {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px 8px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .dials input { position: absolute; opacity: 0; pointer-events: none; }
+  .dials label:has(input:checked) { border-color: var(--gold); background: rgba(201, 163, 90, 0.12); }
+  .dials label:has(input:focus-visible) { outline: 2px solid var(--gold-hi); outline-offset: 2px; }
+  .swatch { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); }
+  .sw-panda { background: radial-gradient(circle at 30% 50%, #111 0 22%, transparent 23%), radial-gradient(circle at 70% 50%, #111 0 22%, transparent 23%), #f3f1ea; }
+  .sw-black { background: radial-gradient(circle at 30% 50%, #eee 0 22%, transparent 23%), radial-gradient(circle at 70% 50%, #eee 0 22%, transparent 23%), #141414; }
+  .sw-gold { background: radial-gradient(circle at 30% 50%, #161210 0 22%, transparent 23%), radial-gradient(circle at 70% 50%, #161210 0 22%, transparent 23%), linear-gradient(135deg, #f0dca5, #b98f4f); }
+
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .toggle input { accent-color: var(--gold); width: 16px; height: 16px; }
+
+  .laps h2 { margin: 0 0 8px; font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .laps ol { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+  .laps li {
+    display: grid;
+    grid-template-columns: 3.2em minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: baseline;
+    padding: 9px 2px;
+    border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+  }
+  .laps li .n { color: var(--muted); font-size: 13px; }
+  .laps li .tot { color: var(--muted); font-size: 13px; }
+  .laps li .tag { font-size: 10px; letter-spacing: 0.1em; margin-left: 8px; padding: 2px 6px; border-radius: 4px; border: 1px solid currentColor; }
+  .laps li.best .split { color: var(--good); }
+  .laps li.worst .split { color: var(--bad); }
+  .laps .empty { color: var(--muted); font-size: 14px; padding: 10px 0; border: 0; display: block; }
+</style>
+
+<main class="wrap">
+  <section class="watch" aria-label="크로노그래프 다이얼">
+    <canvas id="watch" width="600" height="600" role="img" aria-label="세 개의 서브다이얼과 타키미터 베젤이 있는 크로노그래프 손목시계"></canvas>
+    <p class="hint">케이스 오른쪽 푸셔를 직접 눌러도 됩니다. 위쪽(2시)은 시작·정지, 아래쪽(4시)은 리셋입니다. 실제 크로노그래프처럼 작동 중에는 리셋이 듣지 않습니다.</p>
+  </section>
+
+  <section class="panel" aria-label="스톱워치 조작">
+    <header>
+      <p class="eyebrow">Cal. 4130 스타일 · 28,800 vph</p>
+      <h1>Meridian Chronograph</h1>
+    </header>
+
+    <div class="readout">
+      <div class="label"><span>경과 시간</span><span class="chip" id="state" data-state="idle">정지</span></div>
+      <div id="time" aria-live="off">00:00<span class="cs">.00</span></div>
+    </div>
+
+    <div class="controls">
+      <button class="btn primary" id="btnStart" type="button">시작<kbd>Space</kbd></button>
+      <button class="btn" id="btnLap" type="button" disabled>랩<kbd>L</kbd></button>
+      <button class="btn" id="btnReset" type="button" disabled>리셋<kbd>R</kbd></button>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="k">타키미터</span>
+        <span class="v" id="tach">—</span>
+        <span class="note">7.2–60초 구간에서 시속 단위 환산</span>
+      </div>
+      <div class="stat">
+        <span class="k">30분 카운터</span>
+        <span class="v" id="mins">0<small>분</small></span>
+        <span class="note">3·6·9분 눈금은 통화 요금 표시</span>
+      </div>
+    </div>
+
+    <fieldset>
+      <legend>다이얼</legend>
+      <div class="dials">
+        <label><input type="radio" name="dial" id="dial-panda" value="panda" checked><span class="swatch sw-panda"></span>판다 화이트</label>
+        <label><input type="radio" name="dial" id="dial-black" value="black"><span class="swatch sw-black"></span>블랙</label>
+        <label><input type="radio" name="dial" id="dial-gold" value="gold"><span class="swatch sw-gold"></span>옐로 골드</label>
+      </div>
+    </fieldset>
+
+    <div class="row">
+      <label class="toggle"><input type="checkbox" id="sound" checked>푸셔 클릭음</label>
+      <span class="chip" style="color:var(--muted)">초침 1/8초 스텝</span>
+    </div>
+
+    <div class="laps">
+      <h2>랩 기록</h2>
+      <ol id="laps"><li class="empty">작동 중에 랩을 누르면 구간 기록이 쌓입니다.</li></ol>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const cv = document.getElementById('watch');
+  const ctx = cv.getContext('2d');
+  const TAU = Math.PI * 2;
+  const P = (a, r) => [Math.sin(a) * r, -Math.cos(a) * r];
+  let k = 1;
+
+  const store = {
+    get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+    set(key, v) { try { localStorage.setItem(key, v); } catch (e) {} }
+  };
+
+  const STEEL = ['#f4f5f7', '#a3a9b0', '#e6e9ec', '#7b828a', '#f0f2f4', '#9aa1a8', '#dfe3e7', '#737a82', '#f4f5f7'];
+  const GOLD  = ['#f8e2a6', '#b98a3e', '#f2d184', '#8f6626', '#f6dc98', '#b08236', '#efcd7f', '#8a6224', '#f8e2a6'];
+
+  const THEMES = {
+    panda: {
+      metal: STEEL, metalLo: '#6d747c', metalHi: '#eef0f2',
+      dial: ['#fbfaf6', '#e7e5dd'], sunburst: false,
+      sub: '#131416', subRing: '#c4c9ce', subText: '#ecebe6', subHand: '#eef0f2',
+      track: '#1c1c1c', text: '#171717', red: '#b5222b',
+      index: '#151515', indexRim: '#c9ced3', lume: '#f1efe0',
+      hand: '#d9dde1', handIn: '#f3f1e3', chrono: '#202224',
+      bezelText: '#d5d9dd', rehaut: ['#2a2b2e', '#141517']
+    },
+    black: {
+      metal: STEEL, metalLo: '#6d747c', metalHi: '#eef0f2',
+      dial: ['#26272a', '#0b0b0d'], sunburst: false,
+      sub: '#eeede7', subRing: '#c4c9ce', subText: '#1a1a1a', subHand: '#222428',
+      track: '#e9e9e6', text: '#efeee9', red: '#e2493f',
+      index: '#e9e9e6', indexRim: '#c9ced3', lume: '#f1efe0',
+      hand: '#d9dde1', handIn: '#f3f1e3', chrono: '#eef0f2',
+      bezelText: '#d5d9dd', rehaut: ['#2a2b2e', '#141517']
+    },
+    gold: {
+      metal: GOLD, metalLo: '#86601f', metalHi: '#f6dfa1',
+      dial: ['#f3e2b4', '#c29e60'], sunburst: true,
+      sub: '#15120e', subRing: '#d9b56a', subText: '#ecd49a', subHand: '#ecd49a',
+      track: '#2c2214', text: '#2a1f12', red: '#8e1f1f',
+      index: '#2a1f12', indexRim: '#e2bf73', lume: '#f1ead0',
+      hand: '#e2bf73', handIn: '#f3ecd3', chrono: '#3a2b16',
+      bezelText: '#e6c77d', rehaut: ['#2e261a', '#16120c']
+    }
+  };
+  let theme = THEMES[store.get('dial')] ? store.get('dial') : 'panda';
+  document.getElementById('dial-' + theme).checked = true;
+
+  /* ---------- drawing helpers ---------- */
+  function conic(stops, rot) {
+    if (ctx.createConicGradient) {
+      const g = ctx.createConicGradient(rot || 0, 0, 0);
+      stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+      return g;
+    }
+    const g = ctx.createLinearGradient(-240, -240, 240, 240);
+    stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+    return g;
+  }
+  function lin(x0, y0, x1, y1, stops) {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+    return g;
+  }
+  function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); }
+  function ring(r0, r1) { ctx.beginPath(); ctx.arc(0, 0, r1, 0, TAU); ctx.arc(0, 0, r0, 0, TAU, true); }
+  function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+  function spaced(text, x, y, sp) {
+    const chars = [...text];
+    const widths = chars.map(c => ctx.measureText(c).width);
+    const total = widths.reduce((a, b) => a + b, 0) + sp * (chars.length - 1);
+    let cx = x - total / 2;
+    const align = ctx.textAlign; ctx.textAlign = 'left';
+    chars.forEach((c, i) => { ctx.fillText(c, cx, y); cx += widths[i] + sp; });
+    ctx.textAlign = align;
+  }
+  function arcText(text, r, center, sp) {
+    const chars = [...text];
+    const widths = chars.map(c => ctx.measureText(c).width);
+    const total = widths.reduce((a, b) => a + b, 0) + sp * (chars.length - 1);
+    let a = center - total / 2 / r;
+    chars.forEach((c, i) => {
+      const w = widths[i];
+      ctx.save(); ctx.rotate(a + w / 2 / r); ctx.fillText(c, 0, -r); ctx.restore();
+      a += (w + sp) / r;
+    });
+  }
+  function shadow(on, blur, dy) {
+    if (on) { ctx.shadowColor = 'rgba(0,0,0,.38)'; ctx.shadowBlur = blur * k; ctx.shadowOffsetX = dy * 0.6 * k; ctx.shadowOffsetY = dy * k; }
+    else { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+  }
+
+  /* ---------- case ---------- */
+  function drawLugs(T) {
+    for (const s of [-1, 1]) {
+      ctx.save(); ctx.scale(1, s);
+      // bracelet end link + first row of three-piece links
+      ctx.fillStyle = lin(-90, 0, 90, 0, [T.metalLo, T.metalHi, T.metalLo]);
+      rrect(-86, 196, 172, 104, 6); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-86, 246); ctx.lineTo(86, 246);
+      ctx.moveTo(-30, 246); ctx.lineTo(-30, 300);
+      ctx.moveTo(30, 246); ctx.lineTo(30, 300);
+      ctx.stroke();
+      // brushed grain
+      ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      for (let x = -84; x < 86; x += 3) { ctx.moveTo(x, 248); ctx.lineTo(x, 300); }
+      ctx.stroke();
+      for (const x of [-1, 1]) {
+        ctx.save(); ctx.scale(x, 1);
+        ctx.fillStyle = lin(86, 0, 134, 0, [T.metalHi, T.metalLo, T.metalHi]);
+        ctx.beginPath();
+        ctx.moveTo(84, 170); ctx.lineTo(136, 160);
+        ctx.quadraticCurveTo(134, 248, 120, 296);
+        ctx.lineTo(92, 300);
+        ctx.quadraticCurveTo(90, 236, 84, 170);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+    // fade the bracelet out toward the canvas edge
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    for (const s of [-1, 1]) {
+      ctx.fillStyle = lin(0, 250 * s, 0, 300 * s, ['rgba(0,0,0,0)', 'rgba(0,0,0,1)']);
+      ctx.fillRect(-150, s > 0 ? 250 : -300, 300, 50);
+    }
+    ctx.restore();
+  }
+
+  function drawPusher(a, press, T) {
+    ctx.save(); ctx.rotate(a);
+    // screw-down collar
+    ctx.fillStyle = lin(-17, 0, 17, 0, [T.metalLo, T.metalHi, T.metalLo]);
+    rrect(-17, -264, 34, 36, 4); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let y = -260; y < -244; y += 3.5) { ctx.moveTo(-17, y); ctx.lineTo(17, y); }
+    ctx.stroke();
+    // button
+    const d = press * 5;
+    ctx.fillStyle = lin(-12, 0, 12, 0, [T.metalLo, T.metalHi, T.metalLo]);
+    rrect(-12, -284 + d, 24, 24, 6); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.25)';
+    ctx.fillRect(-10, -282 + d, 20, 2);
+    ctx.restore();
+  }
+
+  function drawCrown(T) {
+    ctx.save(); ctx.rotate(Math.PI / 2);
+    // crown guards
+    ctx.fillStyle = lin(-44, 0, 44, 0, [T.metalLo, T.metalHi, T.metalLo]);
+    rrect(-44, -256, 88, 40, 14); ctx.fill();
+    ctx.fillStyle = lin(-15, 0, 15, 0, [T.metalLo, T.metalHi, T.metalLo]);
+    ctx.fillRect(-15, -262, 30, 12);
+    // crown
+    ctx.fillStyle = lin(-24, 0, 24, 0, [T.metalLo, T.metalHi, T.metalLo]);
+    rrect(-24, -282, 48, 22, 5); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    for (let x = -21; x <= 21; x += 3) { ctx.moveTo(x, -281); ctx.lineTo(x, -261); }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCase(T) {
+    ctx.save();
+    shadow(true, 18, 8);
+    ctx.fillStyle = conic(T.metal, -Math.PI / 5);
+    circle(0, 0, 240); ctx.fill();
+    shadow(false);
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1.5;
+    circle(0, 0, 239.2); ctx.stroke();
+    ctx.restore();
+  }
+
+  /* ---------- tachymeter bezel ---------- */
+  const TACH_LABELS = [400, 300, 250, 200, 180, 160, 140, 120, 110, 100, 90, 80, 75, 70, 65, 60];
+  const TACH_TICKS = (() => {
+    const t = [];
+    for (let v = 60; v < 100; v += 5) t.push(v);
+    for (let v = 100; v < 200; v += 10) t.push(v);
+    for (let v = 200; v < 300; v += 20) t.push(v);
+    for (let v = 300; v <= 500; v += 50) t.push(v);
+    return t;
+  })();
+  const tachAngle = v => (3600 / v) / 60 * TAU;
+
+  function drawBezel(T) {
+    // ceramic insert
+    const g = ctx.createRadialGradient(-60, -90, 30, 0, 0, 240);
+    g.addColorStop(0, '#2b2c30'); g.addColorStop(0.7, '#0c0c0e'); g.addColorStop(1, '#050506');
+    ctx.fillStyle = g; ring(193, 231); ctx.fill('evenodd');
+    // gloss
+    ctx.save(); ring(193, 231); ctx.clip('evenodd');
+    ctx.fillStyle = lin(-200, -220, 120, 160, ['rgba(255,255,255,.16)', 'rgba(255,255,255,0)', 'rgba(255,255,255,0)', 'rgba(255,255,255,.05)']);
+    ctx.fillRect(-240, -240, 480, 480);
+    ctx.restore();
+    ctx.strokeStyle = T.metalHi; ctx.globalAlpha = 0.45; ctx.lineWidth = 1;
+    circle(0, 0, 231); ctx.stroke(); ctx.globalAlpha = 1;
+
+    ctx.fillStyle = T.bezelText; ctx.strokeStyle = T.bezelText;
+    ctx.lineCap = 'butt';
+    for (const v of TACH_TICKS) {
+      const a = tachAngle(v);
+      const [x0, y0] = P(a, 195), [x1, y1] = P(a, 200);
+      ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    ctx.font = '500 14px Jost, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const v of TACH_LABELS) {
+      const a = tachAngle(v);
+      const [x0, y0] = P(a, 195), [x1, y1] = P(a, 203);
+      ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      ctx.save(); ctx.rotate(a); ctx.fillText(String(v), 0, -215); ctx.restore();
+    }
+    ctx.font = '500 7.5px Jost, "Segoe UI", sans-serif';
+    arcText('UNITS PER HOUR', 214, 0.40, 1.6);
+  }
+
+  /* ---------- dial ---------- */
+  function drawDial(T) {
+    // rehaut
+    ctx.fillStyle = lin(0, -194, 0, 194, T.rehaut);
+    ring(185, 193.5); ctx.fill('evenodd');
+
+    // dial plate
+    if (T.sunburst && ctx.createConicGradient) {
+      const g = ctx.createConicGradient(0, 0, 0);
+      for (let i = 0; i <= 48; i++) g.addColorStop(i / 48, i % 2 ? T.dial[0] : T.dial[1]);
+      ctx.fillStyle = g; circle(0, 0, 185.5); ctx.fill();
+      const v = ctx.createRadialGradient(0, 0, 20, 0, 0, 186);
+      v.addColorStop(0, 'rgba(255,240,200,.35)'); v.addColorStop(1, 'rgba(90,60,20,.25)');
+      ctx.fillStyle = v; circle(0, 0, 185.5); ctx.fill();
+    } else {
+      const g = ctx.createRadialGradient(-50, -70, 10, 0, 0, 190);
+      g.addColorStop(0, T.dial[0]); g.addColorStop(1, T.dial[1]);
+      ctx.fillStyle = g; circle(0, 0, 185.5); ctx.fill();
+    }
+
+    // 1/4-second chapter ring (28,800 vph = 8 beats/s; 4 graduations per second)
+    ctx.strokeStyle = T.track;
+    for (let i = 0; i < 240; i++) {
+      const a = i / 240 * TAU;
+      let len = 5, w = 0.55;
+      if (i % 20 === 0) { len = 13; w = 1.8; }
+      else if (i % 4 === 0) { len = 9; w = 1.1; }
+      const [x0, y0] = P(a, 181 - len), [x1, y1] = P(a, 181);
+      ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    }
+    ctx.lineWidth = 0.6; circle(0, 0, 181.5); ctx.stroke();
+
+    // applied baton indices (3, 6, 9 are replaced by the counters)
+    for (const h of [12, 1, 2, 4, 5, 7, 8, 10, 11]) {
+      const a = h / 12 * TAU, w = h === 12 ? 11 : 7;
+      ctx.save(); ctx.rotate(a);
+      shadow(true, 2, 1.2);
+      ctx.fillStyle = lin(-w / 2, 0, w / 2, 0, [T.indexRim, '#ffffff', T.indexRim]);
+      ctx.fillRect(-w / 2, -163, w, 34);
+      shadow(false);
+      ctx.fillStyle = T.index; ctx.fillRect(-w / 2 + 1.3, -161.7, w - 2.6, 31.4);
+      ctx.fillStyle = T.lume; ctx.fillRect(-w / 2 + 1.8, -161, w - 3.6, 6.5);
+      ctx.restore();
+    }
+
+    // printing
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = T.text;
+    ctx.font = '400 18px Marcellus, "Times New Roman", serif';
+    spaced('MERIDIAN', 0, -104, 3.2);
+    ctx.font = '500 6.5px Jost, "Segoe UI", sans-serif';
+    spaced('AUTOMATIC · CHRONOMETER', 0, -91, 1.4);
+    ctx.fillStyle = T.red;
+    ctx.font = '500 9px Jost, "Segoe UI", sans-serif';
+    spaced('CHRONOGRAPH', 0, -58, 2.6);
+    ctx.fillStyle = T.text;
+    ctx.font = '500 5.5px Jost, "Segoe UI", sans-serif';
+    spaced('SWISS MADE', 0, 164, 1.6);
+  }
+
+  function drawSubdial(x, y, kind, T, handA) {
+    ctx.save(); ctx.translate(x, y);
+    const R = 41;
+    // recess + azurage
+    ctx.fillStyle = T.sub; circle(0, 0, R); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 0.6;
+    for (let r = 3; r < R - 1; r += 1.7) { circle(0, 0, r); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(0,0,0,.08)';
+    for (let r = 3.85; r < R - 1; r += 1.7) { circle(0, 0, r); ctx.stroke(); }
+    // ring
+    ctx.strokeStyle = T.subRing; ctx.lineWidth = 2.4; circle(0, 0, R); ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.6; circle(0, 0, R + 1.4); ctx.stroke();
+
+    ctx.strokeStyle = T.subText; ctx.fillStyle = T.subText;
+    const tick = (a, r0, r1, w) => {
+      const [x0, y0] = P(a, r0), [x1, y1] = P(a, r1);
+      ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    };
+    ctx.font = '600 8.5px Jost, "Segoe UI", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (kind === 'min') {
+      for (let i = 0; i < 30; i++) {
+        const a = i / 30 * TAU;
+        if (i === 3 || i === 6 || i === 9) tick(a, 30, 38.5, 2.6);
+        else if (i % 5 === 0) tick(a, 32, 38.5, 1.3);
+        else tick(a, 35, 38.5, 0.8);
+      }
+      [[10, 1 / 3], [20, 2 / 3], [30, 0]].forEach(([n, f]) => { const [tx, ty] = P(f * TAU, 23); ctx.fillText(n, tx, ty); });
+    } else if (kind === 'hour') {
+      for (let i = 0; i < 24; i++) {
+        const a = i / 24 * TAU;
+        i % 2 === 0 ? tick(a, 32, 38.5, 1.4) : tick(a, 35.5, 38.5, 0.8);
+      }
+      [[12, 0], [3, 0.25], [6, 0.5], [9, 0.75]].forEach(([n, f]) => { const [tx, ty] = P(f * TAU, 23); ctx.fillText(n, tx, ty); });
+    } else {
+      for (let i = 0; i < 60; i++) {
+        const a = i / 60 * TAU;
+        i % 5 === 0 ? tick(a, 33, 38.5, 1.2) : tick(a, 36, 38.5, 0.55);
+      }
+      [[60, 0], [20, 1 / 3], [40, 2 / 3]].forEach(([n, f]) => { const [tx, ty] = P(f * TAU, 24); ctx.fillText(n, tx, ty); });
+    }
+
+    // hand
+    ctx.save(); ctx.rotate(handA);
+    shadow(true, 2, 1.2);
+    ctx.fillStyle = T.subHand;
+    ctx.beginPath();
+    ctx.moveTo(-1.5, 9); ctx.lineTo(-1.2, -34); ctx.lineTo(0, -37); ctx.lineTo(1.2, -34); ctx.lineTo(1.5, 9);
+    ctx.closePath(); ctx.fill();
+    circle(0, 0, 3.4); ctx.fill();
+    shadow(false);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; circle(0, 0, 1.2); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+  }
+
+  function batonHand(a, len, w, tail, T) {
+    ctx.save(); ctx.rotate(a);
+    shadow(true, 5, 3.5);
+    ctx.fillStyle = lin(-w / 2, 0, w / 2, 0, [T.metalLo, T.hand, T.metalHi, T.hand, T.metalLo]);
+    ctx.beginPath();
+    ctx.moveTo(-w / 2, tail); ctx.lineTo(-w / 2, -len + w / 2); ctx.lineTo(0, -len - w * 0.4);
+    ctx.lineTo(w / 2, -len + w / 2); ctx.lineTo(w / 2, tail); ctx.closePath(); ctx.fill();
+    shadow(false);
+    ctx.fillStyle = T.handIn;
+    ctx.fillRect(-w / 2 + 1.6, -len + w * 0.6, w - 3.2, len * 0.62);
+    ctx.restore();
+  }
+
+  function chronoHand(a, T) {
+    ctx.save(); ctx.rotate(a);
+    shadow(true, 4, 4);
+    ctx.fillStyle = T.chrono;
+    ctx.beginPath();
+    ctx.moveTo(-2.4, 42); ctx.lineTo(-0.8, -178); ctx.lineTo(0.8, -178); ctx.lineTo(2.4, 42); ctx.closePath(); ctx.fill();
+    // lume plot near the tip and counterweight
+    rrect(-3.2, -152, 6.4, 16, 1.5); ctx.fill();
+    circle(0, 34, 5); ctx.fill();
+    shadow(false);
+    ctx.fillStyle = T.lume; ctx.fillRect(-2, -150.8, 4, 13.6);
+    ctx.fillStyle = conic(T.metal, 0); circle(0, 0, 6.5); ctx.fill();
+    ctx.fillStyle = T.chrono; circle(0, 0, 2.2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawGlass() {
+    ctx.save();
+    circle(0, 0, 192); ctx.clip();
+    const g = ctx.createLinearGradient(-180, -200, 80, 60);
+    g.addColorStop(0, 'rgba(255,255,255,.16)'); g.addColorStop(0.45, 'rgba(255,255,255,.03)'); g.addColorStop(0.46, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(-200, -200, 400, 400);
+    ctx.restore();
+  }
+
+  /* ---------- chronograph state ---------- */
+  const st = { running: false, startAt: 0, acc: 0, laps: [], lastLapAt: 0 };
+  const press = { top: -1e9, bottom: -1e9 };
+  const elapsed = now => st.acc + (st.running ? now - st.startAt : 0);
+
+  function draw(now) {
+    const T = THEMES[theme];
+    k = cv.width / 600;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.clearRect(0, 0, 600, 600);
+    ctx.translate(300, 300);
+
+    const pt = Math.max(0, 1 - (now - press.top) / 160);
+    const pb = Math.max(0, 1 - (now - press.bottom) / 160);
+
+    drawLugs(T);
+    drawPusher(TAU / 6, pt, T);
+    drawPusher(TAU / 3, pb, T);
+    drawCrown(T);
+    drawCase(T);
+    drawBezel(T);
+    drawDial(T);
+
+    const e = elapsed(now);
+    const stepped = Math.floor(e / 125) * 0.125;             // 8 beats per second
+    const d = new Date();
+    const secNow = d.getSeconds() + Math.floor(d.getMilliseconds() / 125) * 0.125;
+    const minNow = d.getMinutes() + secNow / 60;
+    const hrNow = (d.getHours() % 12) + minNow / 60;
+
+    drawSubdial(-78, 0, 'sec', T, secNow / 60 * TAU);
+    drawSubdial(78, 0, 'min', T, (Math.floor(e / 60000) % 30) / 30 * TAU);
+    drawSubdial(0, 78, 'hour', T, ((e / 3600000) % 12) / 12 * TAU);
+
+    batonHand(hrNow / 12 * TAU, 100, 9.5, 18, T);
+    batonHand(minNow / 60 * TAU, 152, 7.5, 20, T);
+    chronoHand((stepped % 60) / 60 * TAU, T);
+    drawGlass();
+  }
+
+  /* ---------- panel ---------- */
+  const $ = id => document.getElementById(id);
+  const elTime = $('time'), elState = $('state'), elTach = $('tach'), elMins = $('mins');
+  const btnStart = $('btnStart'), btnLap = $('btnLap'), btnReset = $('btnReset'), elLaps = $('laps');
+  const soundBox = $('sound');
+  if (store.get('sound') === '0') soundBox.checked = false;
+
+  function fmt(ms) {
+    const cs = Math.floor(ms / 10) % 100;
+    const s = Math.floor(ms / 1000) % 60;
+    const m = Math.floor(ms / 60000) % 60;
+    const h = Math.floor(ms / 3600000);
+    const pad = n => String(n).padStart(2, '0');
+    return { main: (h ? h + ':' : '') + pad(m) + ':' + pad(s), cs: pad(cs) };
+  }
+
+  let lastText = '';
+  function updatePanel(now) {
+    const e = elapsed(now);
+    const f = fmt(e);
+    const t = f.main + '.' + f.cs;
+    if (t !== lastText) {
+      lastText = t;
+      elTime.innerHTML = f.main + '<span class="cs">.' + f.cs + '</span>';
+      const sec = e / 1000;
+      elTach.innerHTML = sec >= 7.2 && sec <= 60
+        ? Math.round(3600 / sec) + '<small>units/h</small>'
+        : '—';
+      elMins.innerHTML = (Math.floor(e / 60000) % 30) + '<small>분</small>';
+    }
+  }
+
+  function syncUI() {
+    const e = elapsed(performance.now());
+    btnStart.firstChild.nodeValue = st.running ? '정지' : (e > 0 ? '계속' : '시작');
+    btnLap.disabled = !st.running;
+    btnReset.disabled = st.running || e === 0;
+    elState.dataset.state = st.running ? 'run' : (e > 0 ? 'pause' : 'idle');
+    elState.textContent = st.running ? '작동 중' : (e > 0 ? '일시정지' : '정지');
+  }
+
+  let audio = null;
+  function click(pitch) {
+    if (!soundBox.checked) return;
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const len = Math.floor(audio.sampleRate * 0.03);
+      const buf = audio.createBuffer(1, len, audio.sampleRate);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 6);
+      const src = audio.createBufferSource(); src.buffer = buf;
+      const bp = audio.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = pitch; bp.Q.value = 4;
+      const gain = audio.createGain(); gain.gain.value = 0.9;
+      src.connect(bp).connect(gain).connect(audio.destination);
+      src.start();
+    } catch (e) {}
+  }
+
+  function startStop() {
+    const now = performance.now();
+    press.top = now;
+    if (st.running) { st.acc += now - st.startAt; st.running = false; }
+    else { st.startAt = now; st.running = true; }
+    click(st.running ? 3400 : 2800);
+    syncUI();
+  }
+  function reset() {
+    const now = performance.now();
+    press.bottom = now;
+    click(2200);
+    if (st.running) return;            // a real chronograph ignores reset while running
+    st.acc = 0; st.laps = []; st.lastLapAt = 0;
+    renderLaps(); syncUI();
+  }
+  function lap() {
+    if (!st.running) return;
+    const e = elapsed(performance.now());
+    st.laps.push({ split: e - st.lastLapAt, total: e });
+    st.lastLapAt = e;
+    click(4200);
+    renderLaps();
+  }
+
+  function renderLaps() {
+    if (!st.laps.length) {
+      elLaps.innerHTML = '<li class="empty">작동 중에 랩을 누르면 구간 기록이 쌓입니다.</li>';
+      return;
+    }
+    const splits = st.laps.map(l => l.split);
+    const best = st.laps.length > 1 ? Math.min(...splits) : null;
+    const worst = st.laps.length > 1 ? Math.max(...splits) : null;
+    elLaps.innerHTML = st.laps.map((l, i) => {
+      const s = fmt(l.split), t = fmt(l.total);
+      const cls = l.split === best ? 'best' : l.split === worst ? 'worst' : '';
+      const tag = cls === 'best' ? '<span class="tag">최고</span>' : cls === 'worst' ? '<span class="tag">최저</span>' : '';
+      return `<li class="${cls}"><span class="n">#${i + 1}</span><span class="split">${s.main}.${s.cs}${tag}</span><span class="tot">${t.main}.${t.cs}</span></li>`;
+    }).reverse().join('');
+  }
+
+  btnStart.addEventListener('click', startStop);
+  btnLap.addEventListener('click', lap);
+  btnReset.addEventListener('click', reset);
+  soundBox.addEventListener('change', () => store.set('sound', soundBox.checked ? '1' : '0'));
+  document.querySelectorAll('input[name="dial"]').forEach(r => r.addEventListener('change', () => {
+    theme = r.value; store.set('dial', theme);
+  }));
+
+  document.addEventListener('keydown', e => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = e.target.tagName;
+    if (tag === 'BUTTON' || tag === 'INPUT') { if (e.code === 'Space') return; }
+    if (e.code === 'Space') { e.preventDefault(); startStop(); }
+    else if (e.key === 'l' || e.key === 'L') lap();
+    else if (e.key === 'r' || e.key === 'R') reset();
+  });
+
+  // pushers on the case are clickable
+  function hit(ev) {
+    const r = cv.getBoundingClientRect();
+    const x = (ev.clientX - r.left) / r.width * 600 - 300;
+    const y = (ev.clientY - r.top) / r.height * 600 - 300;
+    const near = a => { const [px, py] = P(a, 272); return Math.hypot(x - px, y - py) < 28; };
+    return near(TAU / 6) ? 'top' : near(TAU / 3) ? 'bottom' : null;
+  }
+  cv.addEventListener('pointerdown', ev => {
+    const h = hit(ev);
+    if (h === 'top') startStop();
+    else if (h === 'bottom') reset();
+  });
+  cv.addEventListener('pointermove', ev => { cv.style.cursor = hit(ev) ? 'pointer' : 'default'; });
+
+  function resize() {
+    const w = cv.getBoundingClientRect().width;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const px = Math.max(300, Math.round(w * dpr));
+    if (cv.width !== px) { cv.width = px; cv.height = px; }
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(cv);
+  window.addEventListener('resize', resize);
+  resize();
+
+  function frame(now) { draw(now); updatePanel(now); requestAnimationFrame(frame); }
+  syncUI();
+  requestAnimationFrame(frame);
+})();
+</script>

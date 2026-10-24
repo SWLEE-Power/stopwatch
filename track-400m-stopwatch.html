@@ -1,0 +1,545 @@
+<title>400m 트랙 스톱워치</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+  /* Layout: scoreboard bar on top, the stadium track as the hero, a lane board underneath. Night-stadium look, single theme. */
+  :root {
+    --bg: #0c1622;
+    --surface: #132233;
+    --line: rgba(190, 214, 235, 0.14);
+    --fg: #eef3f7;
+    --muted: #8ea3b6;
+    --clay: #c65b3c;
+    --clay-hi: #e57a55;
+    --on-clay: #fff7f2;
+    --lamp: #ffd86b;
+    --score: "Barlow Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+    --body: "IBM Plex Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    background: radial-gradient(90% 60% at 50% 0%, #1b3149, transparent 70%), var(--bg);
+    color: var(--fg);
+    font-family: var(--body);
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding-block: 24px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid;
+    gap: 18px;
+  }
+
+  /* scoreboard */
+  .board {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 16px 24px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+  }
+  .clock { display: grid; gap: 2px; min-width: 0; }
+  .eyebrow { margin: 0; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  #time {
+    font-family: var(--score); font-weight: 600;
+    font-size: clamp(48px, 9vw, 76px); line-height: 0.95;
+    color: var(--lamp);
+    font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  #time .cs { font-size: 0.62em; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .btn {
+    font: 600 16px/1 var(--body);
+    padding: 14px 20px; min-width: 96px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: transparent; color: var(--fg);
+    cursor: pointer;
+    transition: border-color .15s, background .15s, transform .08s;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--clay-hi); }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+  .btn:disabled { opacity: .38; cursor: not-allowed; }
+  .btn.primary { background: var(--clay); border-color: var(--clay); color: var(--on-clay); }
+  .btn.primary:hover:not(:disabled) { background: var(--clay-hi); }
+  .btn.lap { border-color: var(--lamp); color: var(--lamp); }
+  .btn kbd { font: 500 11px var(--body); opacity: .6; margin-left: 6px; }
+  :focus-visible { outline: 2px solid var(--lamp); outline-offset: 3px; }
+
+  .count { display: flex; align-items: center; gap: 10px; }
+  .count label { font-size: 13px; color: var(--muted); }
+  .stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .stepper button {
+    width: 40px; height: 44px; border: 0; background: transparent; color: var(--fg);
+    font: 600 20px/1 var(--score); cursor: pointer;
+  }
+  .stepper button:disabled { opacity: .3; cursor: not-allowed; }
+  .stepper output { min-width: 46px; text-align: center; font: 600 24px/1 var(--score); font-variant-numeric: tabular-nums; }
+
+  /* stadium */
+  .stadium {
+    position: relative;
+    border-radius: 18px;
+    overflow: hidden;
+    background: #0a131d;
+    border: 1px solid var(--line);
+  }
+  #track { display: block; width: 100%; height: auto; aspect-ratio: 1000 / 600; max-width: 100%; }
+  .status {
+    position: absolute; left: 14px; top: 12px;
+    font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .status[data-state="run"] { color: #7fe0a4; }
+  .status[data-state="pause"] { color: var(--lamp); }
+  .status[data-state="done"] { color: var(--clay-hi); }
+  .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; max-width: 72ch; }
+
+  /* lane board */
+  .lanes { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 520px; }
+  th, td { padding: 11px 16px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  td { font-variant-numeric: tabular-nums; font-size: 15px; }
+  td.num, th.num { text-align: right; }
+  .lane-chip {
+    display: inline-grid; place-items: center;
+    width: 28px; height: 28px; border-radius: 7px;
+    font: 700 16px/1 var(--score); color: #0c1622;
+  }
+  .rank { font: 700 20px/1 var(--score); }
+  .mono { font-family: var(--score); font-size: 19px; font-weight: 600; letter-spacing: .02em; }
+  .state-run { color: #7fe0a4; }
+  .state-wait { color: var(--muted); }
+  @media (max-width: 640px) {
+    .board { padding: 14px; }
+    .btn { min-width: 0; flex: 1; padding: 13px 12px; }
+    .controls { width: 100%; }
+  }
+</style>
+
+<main class="wrap">
+  <section class="board" aria-label="스톱워치">
+    <div class="clock">
+      <p class="eyebrow">400m · 계단식 출발</p>
+      <div id="time">0:00<span class="cs">.00</span></div>
+    </div>
+    <div class="controls">
+      <button class="btn primary" id="btnStart" type="button">출발<kbd>Space</kbd></button>
+      <button class="btn lap" id="btnLap" type="button" disabled>랩<kbd>L</kbd></button>
+      <button class="btn" id="btnReset" type="button">리셋<kbd>R</kbd></button>
+      <div class="count">
+        <label id="countLabel">선수</label>
+        <div class="stepper" role="group" aria-labelledby="countLabel">
+          <button type="button" id="minus" aria-label="선수 줄이기">−</button>
+          <output id="count" aria-live="polite">4</output>
+          <button type="button" id="plus" aria-label="선수 늘리기">+</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stadium" aria-label="400미터 트랙">
+    <canvas id="track" width="1000" height="600" role="img" aria-label="400미터 트랙 위를 레인별로 달리는 선수들"></canvas>
+    <span class="status" id="status" data-state="idle">출발 대기</span>
+  </section>
+  <p class="hint">랩을 누르면 그 순간 가장 앞서 있는 선수가 멈추고 머리 위에 기록이 뜹니다. 모든 선수가 멈추면 시계도 멈춥니다. 바깥 레인일수록 앞에서 출발하는 계단식 출발이라, 모든 선수가 같은 결승선까지 정확히 400m를 달립니다. 선수 수(1–8명)는 출발 전이나 리셋 후에 바꿀 수 있습니다.</p>
+
+  <section class="lanes" aria-label="레인 기록">
+    <table>
+      <thead><tr><th>레인</th><th>선수</th><th>상태</th><th class="num">달린 거리</th><th class="num">기록</th><th class="num">순위</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+(() => {
+  /* ---------- IAAF standard 400m track geometry (metres) ---------- */
+  const STRAIGHT = 84.39;
+  const R_IN = 36.5;          // kerb radius
+  const LANE_W = 1.22;
+  const LANES = 8;
+  const runR = i => R_IN + 0.3 + i * LANE_W;        // running line, 30cm from inner edge
+  const laneLen = i => 2 * STRAIGHT + 2 * Math.PI * runR(i);
+
+  const W = 1000, H = 600, SC = 5.15, CX = W / 2, CY = H / 2 + 28;
+  const HS = STRAIGHT / 2;
+  const FIG = 1.35;            // runner figure scale (illustrative, larger than a real lane)
+
+  const COLORS = ['#ffd23f', '#4aa8ff', '#ff6b7d', '#57e39c', '#b893ff', '#ffa24c', '#f1f4f7', '#36d3d6'];
+  const NAMES = ['김하늘', '박서준', '이도윤', '최지우', '정민재', '한유나', '오세린', '윤태오'];
+
+  // position along lane i at path distance s (from finish line, counter-clockwise)
+  function posOnLane(i, s) {
+    const r = runR(i), C = Math.PI * r, L = laneLen(i);
+    s = ((s % L) + L) % L;
+    let x, y, dx;
+    if (s < C) {                         // final bend → top
+      const f = s / r; x = HS + r * Math.sin(f); y = r * Math.cos(f); dx = Math.cos(f);
+    } else if (s < C + STRAIGHT) {       // back straight, right → left
+      x = HS - (s - C); y = -r; dx = -1;
+    } else if (s < 2 * C + STRAIGHT) {   // first bend
+      const f = (s - C - STRAIGHT) / r; x = -HS - r * Math.sin(f); y = -r * Math.cos(f); dx = -Math.cos(f);
+    } else {                             // home straight, left → right
+      x = -HS + (s - 2 * C - STRAIGHT); y = r; dx = 1;
+    }
+    return { x: CX + x * SC, y: CY + y * SC, dir: dx >= 0 ? 1 : -1 };
+  }
+
+  /* ---------- state ---------- */
+  let count = 4;
+  let runners = [];
+  const st = { running: false, elapsed: 0, last: 0, finished: 0 };
+
+  function makeRunners() {
+    runners = Array.from({ length: count }, (_, i) => ({
+      lane: i,
+      name: NAMES[i],
+      color: COLORS[i],
+      base: 7.5 + Math.random() * 0.9,            // m/s, roughly 46–53 s for 400 m
+      amp: 0.25 + Math.random() * 0.35,
+      w: 0.25 + Math.random() * 0.35,
+      ph: Math.random() * Math.PI * 2,
+      dist: 0,
+      stopped: false,
+      time: null,
+      rank: null,
+      start: laneLen(i) - 400
+    }));
+  }
+
+  /* ---------- drawing ---------- */
+  const cv = document.getElementById('track');
+  const ctx = cv.getContext('2d');
+  let k = 1;
+
+  let trackLayer = null;
+
+  function drawTrack(c) {
+    c.setTransform(k, 0, 0, k, 0, 0);
+    // stands glow
+    const sky = c.createRadialGradient(CX, CY - 40, 60, CX, CY, 620);
+    sky.addColorStop(0, '#16283b'); sky.addColorStop(1, '#0a131d');
+    c.fillStyle = sky; c.fillRect(0, 0, W, H);
+
+    const outer = R_IN + LANES * LANE_W;
+    const path = r => {
+      c.beginPath();
+      c.arc(CX + HS * SC, CY, r * SC, -Math.PI / 2, Math.PI / 2);
+      c.lineTo(CX - HS * SC, CY + r * SC);
+      c.arc(CX - HS * SC, CY, r * SC, Math.PI / 2, Math.PI * 1.5);
+      c.closePath();
+    };
+    // apron
+    path(outer + 2.2); c.fillStyle = '#2b3a46'; c.fill();
+    // polyurethane surface
+    path(outer); c.fillStyle = '#b8513a'; c.fill();
+    // subtle texture
+    c.save(); path(outer); c.clip();
+    for (let i = 0; i < 2600; i++) {
+      c.fillStyle = Math.random() < .5 ? 'rgba(0,0,0,.08)' : 'rgba(255,220,200,.05)';
+      c.fillRect(Math.random() * W, Math.random() * H, 1.4, 1.4);
+    }
+    c.restore();
+    // infield grass with mowing stripes
+    path(R_IN); c.fillStyle = '#2f7d47'; c.fill();
+    c.save(); path(R_IN); c.clip();
+    for (let x = CX - (HS + R_IN) * SC, j = 0; x < CX + (HS + R_IN) * SC; x += 9 * SC, j++) {
+      if (j % 2) { c.fillStyle = 'rgba(255,255,255,.045)'; c.fillRect(x, 0, 9 * SC, H); }
+    }
+    // centre markings
+    c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 1.4;
+    c.beginPath(); c.arc(CX, CY, 9.15 * SC, 0, Math.PI * 2); c.stroke();
+    c.beginPath(); c.moveTo(CX, CY - 34 * SC); c.lineTo(CX, CY + 34 * SC); c.stroke();
+    c.strokeRect(CX - 52.5 * SC, CY - 34 * SC, 105 * SC, 68 * SC);
+    c.restore();
+    // kerb
+    path(R_IN); c.strokeStyle = '#f4f6f8'; c.lineWidth = 2.2; c.stroke();
+    // lane lines
+    c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 1.1;
+    for (let j = 1; j <= LANES; j++) { path(R_IN + j * LANE_W); c.stroke(); }
+
+    // finish line (end of home straight)
+    const fx = CX + HS * SC;
+    const y0 = CY + R_IN * SC, y1 = CY + outer * SC;
+    const sq = 3.1;
+    for (let y = y0, row = 0; y < y1; y += sq, row++) {
+      for (let col = 0; col < 2; col++) {
+        c.fillStyle = (row + col) % 2 ? '#111' : '#fff';
+        c.fillRect(fx - sq + col * sq, y, sq, Math.min(sq, y1 - y));
+      }
+    }
+    // lane numbers before the finish
+    c.font = '700 15px "Barlow Condensed", "Arial Narrow", sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (let i = 0; i < LANES; i++) {
+      const y = CY + (R_IN + (i + 0.5) * LANE_W) * SC;
+      c.save(); c.translate(fx - 22, y); c.rotate(-Math.PI / 2);
+      c.fillStyle = 'rgba(255,255,255,.9)'; c.fillText(String(i + 1), 0, 1); c.restore();
+    }
+    // staggered start marks
+    c.strokeStyle = '#fff'; c.lineWidth = 2;
+    for (let i = 0; i < LANES; i++) {
+      const s = laneLen(i) - 400;
+      const rIn = R_IN + i * LANE_W, rOut = rIn + LANE_W;
+      const r = runR(i), f = s / r;     // stagger always lands on the final bend
+      const a = (rr) => [CX + (HS + rr * Math.sin(f)) * SC, CY + rr * Math.cos(f) * SC];
+      const [ax, ay] = a(rIn), [bx, by] = a(rOut);
+      c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
+    }
+    c.fillStyle = 'rgba(255,255,255,.55)';
+    c.font = '600 13px "Barlow Condensed", "Arial Narrow", sans-serif';
+    c.fillText('FINISH', fx, y1 + 14);
+  }
+
+  function drawRunner(r, p, t) {
+    const { x, y, dir } = p;
+    ctx.save();
+    ctx.translate(x, y);
+    // ground shadow
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.beginPath(); ctx.ellipse(0, 0, 11, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.scale(dir * FIG, FIG);
+
+    const moving = !r.stopped && st.running;
+    const phase = r.dist / 1.1 * Math.PI;       // one leg cycle every ~2.2 m
+    const sw = r.stopped ? 0 : Math.sin(phase);
+    const sw2 = r.stopped ? 0 : Math.cos(phase);
+    const lean = r.stopped ? 0 : 0.18;
+    const hipY = -15, shoulderY = -27;
+
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const limb = (x0, y0, a1, l1, a2, l2, w, col) => {
+      const kx = x0 + Math.sin(a1) * l1, ky = y0 + Math.cos(a1) * l1;
+      const fx = kx + Math.sin(a2) * l2, fy = ky + Math.cos(a2) * l2;
+      ctx.strokeStyle = col; ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(kx, ky); ctx.lineTo(fx, fy); ctx.stroke();
+    };
+    const skin = '#c98c62', skinBack = '#9c6844';
+    const hx = Math.sin(lean) * 4;
+    // back leg & arm
+    limb(0, hipY, -sw * 0.75, 8, -sw * 0.75 - (0.4 + 0.6 * Math.max(0, sw)), 8, 3.4, skinBack);
+    limb(hx * 1.5, shoulderY + 2, sw * 0.9, 6, sw * 0.9 + 1.3, 5.5, 2.6, skinBack);
+    // torso (singlet in lane colour)
+    ctx.strokeStyle = r.color; ctx.lineWidth = 6.5;
+    ctx.beginPath(); ctx.moveTo(0, hipY); ctx.lineTo(hx * 1.5, shoulderY); ctx.stroke();
+    // shorts
+    ctx.fillStyle = '#1b2430';
+    ctx.beginPath(); ctx.ellipse(0, hipY + 0.5, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+    // front leg & arm
+    limb(0, hipY, sw * 0.75, 8, sw * 0.75 - (0.4 + 0.6 * Math.max(0, -sw)), 8, 3.6, skin);
+    limb(hx * 1.5, shoulderY + 2, -sw * 0.9, 6, -sw * 0.9 + 1.3, 5.5, 2.8, skin);
+    // head
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.arc(hx * 2 + 0.5, shoulderY - 5, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#20160f';
+    ctx.beginPath(); ctx.arc(hx * 2 - 0.3, shoulderY - 6.2, 4, Math.PI * 1.05, Math.PI * 2.05); ctx.fill();
+    ctx.restore();
+
+    // lane bib above runners that are still going
+    if (!r.stopped) {
+      ctx.fillStyle = r.color;
+      ctx.font = '700 11px "Barlow Condensed", "Arial Narrow", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText(String(r.lane + 1), x, y - 40 * FIG - 2);
+    }
+  }
+
+  // bubbles already placed this frame, so close finishers stack instead of overlapping
+  let placed = [];
+  function drawBubble(r, p) {
+    const text = fmt(r.time * 1000).main + '.' + fmt(r.time * 1000).cs;
+    const label = r.rank + '위';
+    ctx.font = '700 17px "Barlow Condensed", "Arial Narrow", sans-serif';
+    const tw = ctx.measureText(text).width;
+    ctx.font = '600 12px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
+    const lw = ctx.measureText(label).width;
+    const w = tw + lw + 26, h = 26;
+    const bx = Math.min(W - w - 6, Math.max(6, p.x - w / 2));
+    let by = p.y - 40 * FIG - 4 - h;              // right above the head
+    const hits = y => placed.some(q => bx < q.x + q.w && bx + w > q.x && y < q.y + q.h + 3 && y + h + 3 > q.y);
+    while (hits(by) && by > 4) by -= h + 4;
+    placed.push({ x: bx, y: by, w, h });
+    // leader line when the bubble had to stack upward
+    ctx.strokeStyle = r.color; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(p.x, by + h); ctx.lineTo(p.x, p.y - 40 * FIG); ctx.stroke();
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 8 * k; ctx.shadowOffsetY = 2 * k;
+    ctx.fillStyle = '#0d1824';
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(bx, by, w, h, 7) : ctx.rect(bx, by, w, h);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = r.color; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, w, h, 7) : ctx.rect(bx, by, w, h); ctx.stroke();
+    // pointer
+    ctx.fillStyle = r.color;
+    ctx.beginPath(); ctx.moveTo(p.x - 5, by + h); ctx.lineTo(p.x + 5, by + h); ctx.lineTo(p.x, by + h + 6); ctx.closePath(); ctx.fill();
+    // rank pill
+    ctx.fillStyle = r.color;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx + 4, by + 4, lw + 10, h - 8, 4) : ctx.rect(bx + 4, by + 4, lw + 10, h - 8); ctx.fill();
+    ctx.fillStyle = '#0c1622'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = '600 12px "IBM Plex Sans KR", "Malgun Gothic", sans-serif';
+    ctx.fillText(label, bx + 9, by + h / 2 + 0.5);
+    ctx.fillStyle = '#ffd86b';
+    ctx.font = '700 17px "Barlow Condensed", "Arial Narrow", sans-serif';
+    ctx.fillText(text, bx + lw + 18, by + h / 2 + 1);
+  }
+
+  function draw() {
+    k = cv.width / W;
+    if (!trackLayer || trackLayer.width !== cv.width) { trackLayer = document.createElement('canvas'); trackLayer.width = cv.width; trackLayer.height = cv.height; drawTrack(trackLayer.getContext('2d')); }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(trackLayer, 0, 0);
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    const items = runners.map(r => ({ r, p: posOnLane(r.lane, r.start + r.dist) }));
+    items.sort((a, b) => a.p.y - b.p.y);
+    items.forEach(({ r, p }) => drawRunner(r, p));
+    placed = [];
+    items.filter(i => i.r.stopped).sort((a, b) => a.r.rank - b.r.rank).forEach(({ r, p }) => drawBubble(r, p));
+  }
+
+  /* ---------- simulation ---------- */
+  function step(dt) {
+    const t = st.elapsed;
+    for (const r of runners) {
+      if (r.stopped) continue;
+      // quick acceleration out of the blocks, then a fluctuating cruise
+      const accel = Math.min(1, 0.35 + t / 3.2);
+      const fade = t > 30 ? 1 - Math.min(0.12, (t - 30) * 0.006) : 1;
+      const v = (r.base + r.amp * Math.sin(t * r.w + r.ph)) * accel * fade;
+      r.dist += v * dt;
+    }
+  }
+
+  function fmt(ms) {
+    const cs = Math.floor(ms / 10) % 100;
+    const s = Math.floor(ms / 1000) % 60;
+    const m = Math.floor(ms / 60000);
+    return { main: m + ':' + String(s).padStart(2, '0'), cs: String(cs).padStart(2, '0') };
+  }
+
+  /* ---------- UI ---------- */
+  const $ = id => document.getElementById(id);
+  const elTime = $('time'), elStatus = $('status'), rows = $('rows');
+  const btnStart = $('btnStart'), btnLap = $('btnLap'), btnReset = $('btnReset');
+  const minus = $('minus'), plus = $('plus'), out = $('count');
+
+  try { const saved = parseInt(localStorage.getItem('track-count'), 10); if (saved >= 1 && saved <= 8) count = saved; } catch (e) {}
+
+  function syncUI() {
+    const started = st.elapsed > 0;
+    const allDone = runners.length && runners.every(r => r.stopped);
+    btnStart.firstChild.nodeValue = st.running ? '정지' : started ? '계속' : '출발';
+    btnStart.disabled = allDone;
+    btnLap.disabled = !st.running;
+    minus.disabled = started || count <= 1;
+    plus.disabled = started || count >= 8;
+    out.textContent = count;
+    const state = allDone ? 'done' : st.running ? 'run' : started ? 'pause' : 'idle';
+    elStatus.dataset.state = state;
+    elStatus.textContent = { idle: '출발 대기', run: '레이스 중', pause: '일시정지', done: '전원 기록 완료' }[state];
+  }
+
+  let lastRows = '';
+  function renderRows() {
+    const html = runners.map(r => {
+      const state = r.stopped ? '기록' : st.running ? '<span class="state-run">달리는 중</span>' : '<span class="state-wait">' + (st.elapsed ? '정지' : '대기') + '</span>';
+      const t = r.time != null ? fmt(r.time * 1000) : null;
+      return `<tr>
+        <td><span class="lane-chip" style="background:${r.color}">${r.lane + 1}</span></td>
+        <td>${r.name}</td>
+        <td>${state}</td>
+        <td class="num mono">${r.dist.toFixed(1)} m</td>
+        <td class="num mono">${t ? t.main + '.' + t.cs : '—'}</td>
+        <td class="num"><span class="rank">${r.rank ? r.rank + '위' : '—'}</span></td>
+      </tr>`;
+    }).join('');
+    if (html !== lastRows) { rows.innerHTML = html; lastRows = html; }
+  }
+
+  function startStop() {
+    if (runners.every(r => r.stopped)) return;
+    st.running = !st.running;
+    st.last = performance.now();
+    syncUI();
+  }
+  function lap() {
+    if (!st.running) return;
+    const live = runners.filter(r => !r.stopped);
+    if (!live.length) return;
+    const leader = live.reduce((a, b) => (b.dist > a.dist ? b : a));
+    leader.stopped = true;
+    leader.time = st.elapsed;
+    leader.rank = ++st.finished;
+    if (live.length === 1) st.running = false;      // last runner in: clock stops
+    syncUI(); renderRows();
+  }
+  function reset() {
+    st.running = false; st.elapsed = 0; st.finished = 0;
+    makeRunners();
+    syncUI(); renderRows();
+  }
+  function setCount(n) {
+    if (st.elapsed > 0) return;
+    count = Math.max(1, Math.min(8, n));
+    try { localStorage.setItem('track-count', String(count)); } catch (e) {}
+    reset();
+  }
+
+  btnStart.addEventListener('click', startStop);
+  btnLap.addEventListener('click', lap);
+  btnReset.addEventListener('click', reset);
+  minus.addEventListener('click', () => setCount(count - 1));
+  plus.addEventListener('click', () => setCount(count + 1));
+  document.addEventListener('keydown', e => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.tagName === 'BUTTON' && (e.code === 'Space' || e.key === 'Enter')) return;
+    if (e.code === 'Space') { e.preventDefault(); startStop(); }
+    else if (e.key === 'l' || e.key === 'L') lap();
+    else if (e.key === 'r' || e.key === 'R') reset();
+  });
+
+  function resize() {
+    const w = cv.getBoundingClientRect().width || W;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const px = Math.max(500, Math.round(w * dpr));
+    if (cv.width !== px) { cv.width = px; cv.height = Math.round(px * H / W); trackLayer = null; }
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(cv);
+  resize();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { trackLayer = null; });
+
+  let lastText = '';
+  function frame(now) {
+    if (st.running) {
+      const dt = Math.min(0.1, (now - st.last) / 1000);
+      st.last = now;
+      st.elapsed += dt;
+      step(dt);
+      renderRows();
+    }
+    const f = fmt(st.elapsed * 1000);
+    const txt = f.main + f.cs;
+    if (txt !== lastText) { lastText = txt; elTime.innerHTML = f.main + '<span class="cs">.' + f.cs + '</span>'; }
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  reset();
+  requestAnimationFrame(frame);
+})();
+</script>
